@@ -47,9 +47,9 @@ import javax.transaction.xa.XAException;
 import javax.transaction.xa.XAResource;
 import javax.transaction.xa.Xid;
 
-import com.arjuna.ats.arjuna.common.arjPropertyManager;
 import org.jboss.tm.ExtendedJBossXATerminator;
 import org.jboss.tm.ImportedTransaction;
+import org.jboss.tm.JBossXATerminator;
 import org.jboss.tm.TransactionImportResult;
 import org.wildfly.common.Assert;
 import org.wildfly.common.annotation.NotNull;
@@ -59,6 +59,8 @@ import org.wildfly.transaction.client.XAImporter;
 import org.wildfly.transaction.client._private.Log;
 import org.wildfly.transaction.client.spi.LocalTransactionProvider;
 import org.wildfly.transaction.client.spi.SubordinateTransactionControl;
+
+import com.arjuna.ats.arjuna.common.arjPropertyManager;
 
 /**
  * The local transaction provider for JBoss application servers.
@@ -70,20 +72,22 @@ public abstract class JBossLocalTransactionProvider implements LocalTransactionP
 
     private final int staleTransactionTime;
     private final ExtendedJBossXATerminator ext;
+    private final JBossXATerminator jbossTerminator;
     private final TransactionManager tm;
     private final XAImporterImpl xi = new XAImporterImpl();
     private final ConcurrentSkipListSet<XidKey> timeoutSet = new ConcurrentSkipListSet<>();
     private final ConcurrentMap<SimpleXid, Entry> known = new ConcurrentHashMap<>();
 
-    JBossLocalTransactionProvider(final ExtendedJBossXATerminator ext, final int staleTransactionTime, final TransactionManager tm) {
+    JBossLocalTransactionProvider(final ExtendedJBossXATerminator ext, final int staleTransactionTime, final TransactionManager tm, final JBossXATerminator jbossTerminator) {
         Assert.checkMinimumParameter("setTransactionTimeout", 0, staleTransactionTime);
         this.staleTransactionTime = staleTransactionTime;
         this.ext = Assert.checkNotNullParam("ext", ext);
         this.tm = Assert.checkNotNullParam("tm", tm);
+        this.jbossTerminator = Assert.checkNotNullParam("jbossTerminator", jbossTerminator);
 
         try {
-            ext.doRecover(null, null);
-        } catch (XAException | NotSupportedException e) {
+            this.jbossTerminator.recover(XAResource.TMSTARTRSCAN);
+        } catch (Exception e) {
             // recovery is called to load all transaction in object store at startup
             // if fails we ignore, it's only preparation step, will be adjusted during runtime
         }
@@ -614,7 +618,7 @@ public abstract class JBossLocalTransactionProvider implements LocalTransactionP
     public static final class Builder {
         private int staleTransactionTime = 600;
         private ExtendedJBossXATerminator extendedJBossXATerminator;
-        private XATerminator xaTerminator;
+        private JBossXATerminator jbossXATerminator;
         private TransactionManager transactionManager;
         private TransactionSynchronizationRegistry transactionSynchronizationRegistry;
 
@@ -667,8 +671,8 @@ public abstract class JBossLocalTransactionProvider implements LocalTransactionP
          * @return the XA terminator
          */
         @Deprecated
-        public XATerminator getXATerminator() {
-            return xaTerminator;
+        public JBossXATerminator getXATerminator() {
+            return jbossXATerminator;
         }
 
         /**
@@ -677,9 +681,9 @@ public abstract class JBossLocalTransactionProvider implements LocalTransactionP
          * @param xt the XA terminator (must not be {@code null})
          */
         @Deprecated
-        public Builder setXATerminator(final XATerminator xt) {
+        public Builder setXATerminator(final JBossXATerminator xt) {
             Assert.checkNotNullParam("xt", xt);
-            this.xaTerminator = xt;
+            this.jbossXATerminator = xt;
             return this;
         }
 
@@ -740,10 +744,10 @@ public abstract class JBossLocalTransactionProvider implements LocalTransactionP
             Assert.checkMinimumParameter("staleTransactionTime", 0, staleTransactionTime);
             if (transactionManager instanceof com.arjuna.ats.internal.jta.transaction.arjunacore.TransactionManagerImple
              || transactionManager instanceof com.arjuna.ats.jbossatx.jta.TransactionManagerDelegate) {
-                return new JBossJTALocalTransactionProvider(staleTransactionTime, extendedJBossXATerminator, transactionManager);
+                return new JBossJTALocalTransactionProvider(staleTransactionTime, extendedJBossXATerminator, transactionManager, jbossXATerminator);
             } else if (transactionManager instanceof com.arjuna.ats.internal.jta.transaction.jts.TransactionManagerImple
              || transactionManager instanceof com.arjuna.ats.jbossatx.jts.TransactionManagerDelegate) {
-                return new JBossJTSLocalTransactionProvider(staleTransactionTime, extendedJBossXATerminator, transactionManager);
+                return new JBossJTSLocalTransactionProvider(staleTransactionTime, extendedJBossXATerminator, transactionManager, jbossXATerminator);
             } else {
                 throw Log.log.unknownTransactionManagerType(transactionManager.getClass());
             }
