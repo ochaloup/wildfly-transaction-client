@@ -42,7 +42,7 @@ import org.wildfly.transaction.client._private.Log;
  */
 public final class LocalTransaction extends AbstractTransaction {
     private final LocalTransactionContext owner;
-    private final Transaction transaction;
+    public final Transaction transaction;
 
     LocalTransaction(final LocalTransactionContext owner, final Transaction transaction) {
         this.owner = owner;

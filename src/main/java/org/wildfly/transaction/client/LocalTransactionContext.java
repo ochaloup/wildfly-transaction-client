@@ -338,7 +338,7 @@ public final class LocalTransactionContext implements Contextual<LocalTransactio
         requestsSuspended = false;
     }
 
-    LocalTransactionProvider getProvider() {
+    public LocalTransactionProvider getProvider() {
         return provider;
     }
 

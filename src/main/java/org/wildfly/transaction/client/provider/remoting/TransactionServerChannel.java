@@ -610,7 +610,14 @@ final class TransactionServerChannel {
                     return;
                 }
                 // run operation while associated
-                importResult.getControl().commit(onePhaseCopy);
+                try {
+                    importResult.getControl().commit(onePhaseCopy);
+                } catch (XAException e) {
+                    if (e.errorCode == XAException.XA_RETRY) {
+                        localTransactionContext.getProvider().dropLocal(((LocalTransaction)importResult.getTransaction()).transaction);
+                    }
+                    throw e;
+                }
                 writeSimpleResponse(M_RESP_XA_COMMIT, invId);
             } catch (XAException e) {
                 writeExceptionResponse(M_RESP_XA_COMMIT, invId, e);
