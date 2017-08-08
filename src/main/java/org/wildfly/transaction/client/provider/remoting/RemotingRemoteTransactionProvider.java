@@ -26,6 +26,7 @@ import java.util.ServiceLoader;
 import javax.net.ssl.SSLContext;
 import javax.transaction.SystemException;
 
+import org.jboss.remoting3.Connection;
 import org.jboss.remoting3.Endpoint;
 import org.kohsuke.MetaInfServices;
 import org.wildfly.security.auth.client.AuthenticationConfiguration;
@@ -64,5 +65,9 @@ public final class RemotingRemoteTransactionProvider implements RemoteTransactio
 
     public RemoteTransactionPeer getPeerHandle(final URI location, final SSLContext sslContext, final AuthenticationConfiguration authenticationConfiguration) throws SystemException {
         return new RemotingRemoteTransactionPeer(location, sslContext, authenticationConfiguration, Endpoint.getCurrent(), fallbackProvider);
+    }
+
+    public RemoteTransactionPeer getPeerHandle(final Connection connection) {
+        return new RemotingRemoteTransactionPeer(connection);
     }
 }

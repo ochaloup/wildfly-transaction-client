@@ -58,13 +58,24 @@ class RemotingRemoteTransactionPeer implements RemoteTransactionPeer {
     private final Endpoint endpoint;
     private final RemotingFallbackPeerProvider fallbackProvider;
     private final Set<Xid> rollbackOnlyXids = new ConcurrentHashMap<Xid, Boolean>().keySet(Boolean.TRUE);
+    private final Connection connection;
 
     RemotingRemoteTransactionPeer(final URI location, final SSLContext sslContext, final AuthenticationConfiguration authenticationConfiguration, final Endpoint endpoint, final RemotingFallbackPeerProvider fallbackProvider) {
         this.location = location;
         this.sslContext = sslContext;
         this.authenticationConfiguration = authenticationConfiguration;
-        this.endpoint = endpoint;
+        this.endpoint = endpoint; 
         this.fallbackProvider = fallbackProvider;
+        this.connection = null;
+    }
+
+    RemotingRemoteTransactionPeer(final Connection connection) {
+        this.location = null;
+        this.sslContext = null;
+        this.authenticationConfiguration = null;
+        this.endpoint = null;
+        this.fallbackProvider = null;
+        this.connection = connection;
     }
 
     ConnectionPeerIdentity getPeerIdentity() throws IOException {
@@ -198,8 +209,12 @@ class RemotingRemoteTransactionPeer implements RemoteTransactionPeer {
 
     @NotNull
     public Xid[] recover(final int flag, final String parentName) throws XAException {
-        final ConnectionPeerIdentity peerIdentity = getPeerIdentityXA();
-        return getOperationsXA(peerIdentity.getConnection()).recover(flag, parentName, peerIdentity);
+        if(connection != null) {
+            return getOperationsXA(connection).recover(flag, parentName, getPeerIdentityXA());
+        } else {
+            final ConnectionPeerIdentity peerIdentity = getPeerIdentityXA();
+            return getOperationsXA(peerIdentity.getConnection()).recover(flag, parentName, peerIdentity);
+        }
     }
 
     @NotNull

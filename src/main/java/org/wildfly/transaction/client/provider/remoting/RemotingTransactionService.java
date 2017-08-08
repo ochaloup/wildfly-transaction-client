@@ -18,6 +18,9 @@
 
 package org.wildfly.transaction.client.provider.remoting;
 
+import java.net.URI;
+import java.util.Collection;
+
 import org.jboss.remoting3.Attachments;
 import org.jboss.remoting3.Channel;
 import org.jboss.remoting3.Connection;
@@ -25,6 +28,7 @@ import org.jboss.remoting3.Endpoint;
 import org.jboss.remoting3.OpenListener;
 import org.jboss.remoting3.Registration;
 import org.jboss.remoting3.ServiceRegistrationException;
+import org.jboss.tm.XAResourceRecovery;
 import org.wildfly.transaction.client.LocalTransactionContext;
 import org.wildfly.transaction.client._private.Log;
 import org.xnio.OptionMap;
@@ -37,6 +41,7 @@ import org.xnio.OptionMap;
 public final class RemotingTransactionService {
     private final Endpoint endpoint;
     private final LocalTransactionContext transactionContext;
+    private final RemotingRecoveryRegistry recoveryRegistry = new RemotingRecoveryRegistry();
     private static final Attachments.Key<RemotingTransactionServer> KEY = new Attachments.Key<>(RemotingTransactionServer.class);
 
     RemotingTransactionService(final Endpoint endpoint, final LocalTransactionContext transactionContext) {
@@ -79,6 +84,18 @@ public final class RemotingTransactionService {
      */
     public LocalTransactionContext getTransactionContext() {
         return transactionContext;
+    }
+
+    public XAResourceRecovery getXAResourceRecovery() {
+        return recoveryRegistry;
+    }
+
+    public RemotingTransactionService addRecoveryUri(URI uri) {
+        recoveryRegistry.addRemoteUri(uri);
+        return this;
+    }
+    public Collection<URI> getRecoveryUris() {
+        return recoveryRegistry.getUris();
     }
 
     public static Builder builder() {

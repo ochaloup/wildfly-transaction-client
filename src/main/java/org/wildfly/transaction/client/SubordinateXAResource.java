@@ -32,16 +32,18 @@ import javax.transaction.xa.XAException;
 import javax.transaction.xa.XAResource;
 import javax.transaction.xa.Xid;
 
+import org.jboss.remoting3.Connection;
 import org.wildfly.common.Assert;
 import org.wildfly.common.annotation.NotNull;
 import org.wildfly.transaction.client._private.Log;
+import org.wildfly.transaction.client.provider.remoting.RemotingRemoteTransactionProvider;
 import org.wildfly.transaction.client.spi.RemoteTransactionProvider;
 import org.wildfly.transaction.client.spi.SubordinateTransactionControl;
 
 /**
  * @author <a href="mailto:david.lloyd@redhat.com">David M. Lloyd</a>
  */
-final class SubordinateXAResource implements XAResource, XARecoverable, Serializable {
+public final class SubordinateXAResource implements XAResource, XARecoverable, Serializable {
     private static final long serialVersionUID = 444691792601946632L;
 
     private final URI location;
@@ -53,12 +55,12 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
 
     private final AtomicInteger stateRef = new AtomicInteger(0);
 
-    SubordinateXAResource(final URI location, final String parentName) {
+    public SubordinateXAResource(final URI location, final String parentName) {
         this.location = location;
         this.parentName = parentName;
     }
 
-    SubordinateXAResource(final URI location, final int flags, final String parentName) {
+    public SubordinateXAResource(final URI location, final int flags, final String parentName) {
         this.location = location;
         this.parentName = parentName;
         stateRef.set(flags);
@@ -165,6 +167,10 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
 
     public Xid[] recover(final int flag, final String parentName) throws XAException {
         return getProvider().getPeerHandleForXa(location, null, null).recover(flag, parentName);
+    }
+
+    public Xid[] recover(final Connection connection, final int flag, final String parentName) throws XAException {
+        return new RemotingRemoteTransactionProvider().getPeerHandle(connection).recover(flag, parentName);
     }
 
     public boolean isSameRM(final XAResource xaRes) throws XAException {

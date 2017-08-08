@@ -290,7 +290,9 @@ public final class LocalTransactionContext implements Contextual<LocalTransactio
         final XAImporter xaImporter = provider.getXAImporter();
         return new XARecoverable() {
             public Xid[] recover(final int flag, final String parentName) throws XAException {
-                return xaImporter.recover(flag, parentName);
+                Xid[] xids = xaImporter.recover(flag, parentName);
+                if(xids == null) xids = new Xid[]{};
+                return xids;
             }
 
             public void commit(final Xid xid, final boolean onePhase) throws XAException {
@@ -338,7 +340,7 @@ public final class LocalTransactionContext implements Contextual<LocalTransactio
         requestsSuspended = false;
     }
 
-    LocalTransactionProvider getProvider() {
+    public LocalTransactionProvider getProvider() {
         return provider;
     }
 
