@@ -139,7 +139,7 @@ public final class LocalTransaction extends AbstractTransaction {
     }
 
     public int getStatus() throws SystemException {
-        return transaction.getStatus();
+        return owner.getProvider().getTransactionManager().getStatus();
     }
 
     public int getTransactionTimeout() {
