@@ -32,6 +32,7 @@ import javax.transaction.xa.XAException;
 import javax.transaction.xa.XAResource;
 import javax.transaction.xa.Xid;
 
+import org.jboss.tm.XAResourceEndWithResult;
 import org.wildfly.common.Assert;
 import org.wildfly.common.annotation.NotNull;
 import org.wildfly.transaction.client._private.Log;
@@ -41,7 +42,7 @@ import org.wildfly.transaction.client.spi.SubordinateTransactionControl;
 /**
  * @author <a href="mailto:david.lloyd@redhat.com">David M. Lloyd</a>
  */
-final class SubordinateXAResource implements XAResource, XARecoverable, Serializable {
+final class SubordinateXAResource implements XAResource, XAResourceEndWithResult, XARecoverable, Serializable {
     private static final long serialVersionUID = 444691792601946632L;
 
     private final URI location;
@@ -125,10 +126,13 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
         this.xid = xid;
     }
 
-    public void end(final Xid xid, final int flags) throws XAException {
+    public int endWithResult(Xid xid, int flags) throws XAException {
         if (flags == TMSUCCESS || flags == TMFAIL) {
+            if (!commitToEnlistment())
+                return XA_RDONLY;
             lookup(xid).end(flags);
         }
+        return XA_OK;
     }
 
     public void beforeCompletion(final Xid xid) throws XAException {
