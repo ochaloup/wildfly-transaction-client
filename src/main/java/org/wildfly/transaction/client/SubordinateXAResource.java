@@ -32,6 +32,7 @@ import javax.transaction.xa.XAException;
 import javax.transaction.xa.XAResource;
 import javax.transaction.xa.Xid;
 
+import org.jboss.tm.XAResourceWithPriorityHint;
 import org.wildfly.common.Assert;
 import org.wildfly.common.annotation.NotNull;
 import org.wildfly.transaction.client._private.Log;
@@ -41,7 +42,7 @@ import org.wildfly.transaction.client.spi.SubordinateTransactionControl;
 /**
  * @author <a href="mailto:david.lloyd@redhat.com">David M. Lloyd</a>
  */
-final class SubordinateXAResource implements XAResource, XARecoverable, Serializable {
+final class SubordinateXAResource implements XAResource, XAResourceWithPriorityHint, XARecoverable, Serializable {
     private static final long serialVersionUID = 444691792601946632L;
 
     private final URI location;
@@ -137,6 +138,17 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
         if (flags == TMSUCCESS || flags == TMFAIL) {
             lookup(xid).end(flags);
         }
+    }
+
+    /**
+     * If the resource was not committed to enlistment, aka. there is no transactional
+     * work on this branch, then prefering to be processed at the start of the two phase commit
+     * as 1PC could be applied for the rest of the resources in the transaction manager list.
+     */
+    public short getPreparePriorityHint() {
+        if (!commitToEnlistment())
+            return Short.MIN_VALUE;
+        return 0;
     }
 
     public void beforeCompletion(final Xid xid) throws XAException {
