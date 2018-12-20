@@ -64,11 +64,11 @@ public interface Log extends BasicLogger {
     // Warn
 
     @LogMessage(level = Logger.Level.WARN)
-    @Message(value = "Unknown I/O error when listing xa resource recovery files in %s (File.list() returned null)")
+    @Message(id = 97, value = "Unknown I/O error when listing xa resource recovery files in %s (File.list() returned null)")
     void listXAResourceRecoveryFilesNull(File dir);
 
     @LogMessage(level = Logger.Level.WARN)
-    @Message(value = "Error while removing imported transaction of xid %s from the underlying transaction manager")
+    @Message(id = 98, value = "Error while removing imported transaction of xid %s from the underlying transaction manager")
     void cannotRemoveImportedTransaction(Xid xid, @Cause XAException e);
 
     // Debug
