@@ -18,6 +18,8 @@
 
 package org.wildfly.transaction.client;
 
+import static java.lang.Math.max;
+
 import java.net.URI;
 import java.security.AccessController;
 import java.security.GeneralSecurityException;
@@ -219,7 +221,7 @@ public final class RemoteTransaction extends AbstractTransaction {
         } catch (GeneralSecurityException e) {
             throw new IllegalArgumentException(e);
         }
-        final SimpleTransactionControl control = provider.getPeerHandle(location, sslContext, authenticationConfiguration).begin(getEstimatedRemainingTime());
+        final SimpleTransactionControl control = provider.getPeerHandle(location, sslContext, authenticationConfiguration).begin(max(1, getEstimatedRemainingTime()));
         try {
             stateRef.get().join(stateRef, location, control);
         } catch (Throwable t) {
