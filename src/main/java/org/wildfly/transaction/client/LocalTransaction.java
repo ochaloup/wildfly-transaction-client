@@ -160,7 +160,7 @@ public final class LocalTransaction extends AbstractTransaction {
 
     public boolean enlistResource(final XAResource xaRes) throws RollbackException, IllegalStateException, SystemException {
         Assert.checkNotNullParam("xaRes", xaRes);
-        final int estimatedRemainingTime = max(1, getEstimatedRemainingTime());
+        final int estimatedRemainingTime = getEstimatedRemainingTime();
         try {
             xaRes.setTransactionTimeout(estimatedRemainingTime);
         } catch (XAException e) {
