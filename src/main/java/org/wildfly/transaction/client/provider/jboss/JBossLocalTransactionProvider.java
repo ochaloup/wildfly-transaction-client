@@ -157,7 +157,7 @@ public abstract class JBossLocalTransactionProvider implements LocalTransactionP
 
     @Override
     public XAResourceRegistry getXAResourceRegistry(LocalTransaction transaction) throws SystemException {
-        return fileSystemXAResourceRegistry.getXAResourceRegistryFile(transaction);
+        return fileSystemXAResourceRegistry.getXAResourceRegistry(transaction);
     }
 
     abstract int getTransactionManagerTimeout() throws SystemException;

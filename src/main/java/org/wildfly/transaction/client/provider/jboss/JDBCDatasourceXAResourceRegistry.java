@@ -1,6 +1,6 @@
 /*
  * JBoss, Home of Professional Open Source.
- * Copyright 2018 Red Hat, Inc., and individual contributors
+ * Copyright 2019 Red Hat, Inc., and individual contributors
  * as indicated by the @author tags.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,6 +24,7 @@ import org.wildfly.transaction.client.XAResourceRegistry;
 import org.wildfly.transaction.client._private.Log;
 import org.wildfly.transaction.client.spi.LocalTransactionProvider;
 
+import javax.sql.DataSource;
 import javax.transaction.SystemException;
 import javax.transaction.xa.XAException;
 import javax.transaction.xa.XAResource;
@@ -39,27 +40,17 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.sql.Connection;
+import java.sql.Statement;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
 /**
- * A registry persisted in a series of log files, containing all outflowed resources info for unfinished transactions.
- * This registry is created whenever a subordinate resource is outflowed to a remote location,
- * and deleted only when all outflowed resources participating in that transaction are successfully prepared,
- * committed or rolled back (the two latter in the case of a one-phase commit).
- *
- * Used for {@link #getInDoubtXAResources()}  recovery of in doubt resources}.
- *
- * @author Flavia Rainone
+ * TODO: see {@link FileSystemXAResourceRegistry}
  */
-final class FileSystemXAResourceRegistry implements XAResourceRegistryProvider {
-
-    /**
-     * Name of recovery dir. Location of this dir can be defined at constructor.
-     */
-    private static final String RECOVERY_DIR = "ejb-xa-recovery";
+final class JDBCDatasourceXAResourceRegistry implements XAResourceRegistryProvider {
 
     /**
      * Empty utility array.
@@ -77,66 +68,45 @@ final class FileSystemXAResourceRegistry implements XAResourceRegistryProvider {
     private final LocalTransactionProvider provider;
 
     /**
-     * The xa recovery path, i.e., the path containing {@link #RECOVERY_DIR}.
-     */
-    private final Path xaRecoveryPath;
-
-    /**
-     * A set containing the list of all registry files that are currently open. Used as a support to
-     * identify in doubt registries. See {@link #recoverInDoubtRegistries}.
-     */
-    private final Set<String> openFilePaths = Collections.synchronizedSet(new HashSet<>());
-
-    /**
+     * <p>
      * A set of in doubt resources, i.e., outflowed resources whose prepare/rollback/commit operation was not
      * completed normally, or resources that have been recovered from in doubt registries. See
      * {@link XAResourceRegistryFile#resourceInDoubt} and {@link XAResourceRegistryFile#loadInDoubtResources}.
+     * </p>
+     * <p>
+     * It is a set because we could have an in doubt resource reincide in failure to complete
+     * </p>
      */
-    private final Set<XAResource> inDoubtResources = Collections.synchronizedSet(new HashSet<>()); // it is a set because we could have an in doubt resource reincide in failure to complete
+    private final Set<XAResource> inDoubtResources = Collections.synchronizedSet(new HashSet<>());
+
+    private final DataSource ds;
+    private final String tableName;
 
     /**
      * Creates a FileSystemXAResourceRegistry.
      *
      * @param relativePath the path recovery dir is relative to
      */
-    FileSystemXAResourceRegistry (LocalTransactionProvider provider, Path relativePath) {
+    JDBCDatasourceXAResourceRegistry (DataSource ds, String tableName, LocalTransactionProvider provider) {
         this.provider = provider;
-        if (relativePath == null)
-             this.xaRecoveryPath = FileSystems.getDefault().getPath(RECOVERY_DIR);
-        else
-            this.xaRecoveryPath = relativePath.resolve(RECOVERY_DIR);
+        this.ds = ds;
+        this.tableName = tableName;
     }
 
     /**
-     * Returns the XAResourceRegistry file for {@code transaction}.
-     *
-     * @param transaction the transaction
-     * @return the XAResourceRegistry for {@code transaction}. If there is no such registry file, a new one is created.
-     * @throws SystemException if an unexpected failure occurs when creating the registry file
+     * {@inheritDoc}
      */
     public XAResourceRegistry getXAResourceRegistry(LocalTransaction transaction) throws SystemException {
         XAResourceRegistry registry = (XAResourceRegistry) transaction.getResource(XA_RESOURCE_REGISTRY_KEY);
         if (registry != null)
             return registry;
-        registry = new XAResourceRegistryFile(transaction.getXid());
+        registry = new XAResourceRegistryJDBCDatasource(transaction.getXid());
         transaction.putResource(XA_RESOURCE_REGISTRY_KEY, registry);
         return registry;
     }
 
     /**
-     * Returns a list containing all in doubt xa resources. A XAResource is considered in doubt if:
-     * <ul>
-     *     <li>it failed to prepare on a two-phase commit by throwing an exception</li>
-     *     <li>it failed to commit or rollback in a one-phase commit by throwing an exception</li>
-     * </ul>
-     * An in doubt resource is no longer considered in doubt if it succeeded to rollback without an exception.
-     *
-     * Notice that in doubt xa resources are kept after the server shuts down, guaranteeing that they can eventually be
-     * recovered, even if in a different server JVM instance than the one that outflowed the resource. This mechanism
-     * assures proper recovery and abortion of the original in-doubt outflowed resource, that belongs to an external
-     * remote server.
-     *
-     * @return a list of the in doubt xa resources
+     * {@inheritDoc}
      */
     public XAResource[] getInDoubtXAResources() {
         try {
@@ -154,6 +124,10 @@ final class FileSystemXAResourceRegistry implements XAResourceRegistryProvider {
      * @throws IOException if there is an I/O error when reading the recovered registry files
      */
     private void recoverInDoubtRegistries() throws IOException {
+    	Connection sqlConnection = ds.getConnection();
+    	Statement statement = sqlConnection.createStatement();
+    	ResultSet rs = statement.executeQuery("SELECT Lname FROM " + tableName " + WHERE Snum = 2001");
+
         final File recoveryDir = xaRecoveryPath.toFile();
         if (!recoveryDir.exists()) {
             return;
@@ -174,7 +148,7 @@ final class FileSystemXAResourceRegistry implements XAResourceRegistryProvider {
     /**
      * Represents a single file in the file system that records all outflowed resources per a specific local transaction.
      */
-    private final class XAResourceRegistryFile extends XAResourceRegistry {
+    private final class XAResourceRegistryJDBCDatasource extends XAResourceRegistry {
 
         /**
          * Path to the registry file.
@@ -203,7 +177,7 @@ final class FileSystemXAResourceRegistry implements XAResourceRegistryProvider {
          * @param xid the transaction xid
          * @throws SystemException if the there was a problem when creating the recovery file in file system
          */
-        XAResourceRegistryFile(Xid xid) throws SystemException {
+        XAResourceRegistryJDBCDatasource(Xid xid) throws SystemException {
             xaRecoveryPath.toFile().mkdir(); // create dir if non existent
             final String xidString = SimpleXid.of(xid).toHexString('_');
             this.filePath = xaRecoveryPath.resolve(xidString);
