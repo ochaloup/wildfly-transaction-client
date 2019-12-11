@@ -95,6 +95,7 @@ public abstract class JBossLocalTransactionProvider implements LocalTransactionP
             Log.log.doRecoverFailureOnIntialization(e);
         }
         this.fileSystemXAResourceRegistry = new FileSystemXAResourceRegistry(this, xaRecoveryDirRelativeToPath);
+        Log.log.tracef("Indoubt resources from '%s' are: %s", fileSystemXAResourceRegistry, fileSystemXAResourceRegistry.getInDoubtXAResources());
         registry.addXAResourceRecovery(fileSystemXAResourceRegistry::getInDoubtXAResources);
     }
 

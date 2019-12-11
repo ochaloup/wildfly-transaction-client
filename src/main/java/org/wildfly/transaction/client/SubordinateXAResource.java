@@ -25,6 +25,7 @@ import java.io.Serializable;
 import java.net.URI;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -38,6 +39,7 @@ import org.wildfly.common.Assert;
 import org.wildfly.common.annotation.NotNull;
 import org.wildfly.security.auth.client.AuthenticationContext;
 import org.wildfly.transaction.client._private.Log;
+import org.wildfly.transaction.client.provider.jboss.FileSystemXAResourceRegistry;
 import org.wildfly.transaction.client.spi.RemoteTransactionPeer;
 import org.wildfly.transaction.client.spi.RemoteTransactionProvider;
 import org.wildfly.transaction.client.spi.SubordinateTransactionControl;
@@ -151,6 +153,7 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
     }
 
     public int prepare(final Xid xid) throws XAException {
+        Log.log.tracef("Resource: %s. Preparing xid: %s, resource registry: %s", this, xid, resourceRegistry);
         final int result;
         try {
             result = commitToEnlistment() ? lookup(xid).prepare() : XA_RDONLY;
@@ -159,22 +162,38 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
                 resourceRegistry.resourceInDoubt(this);
             throw exception;
         }
+        if(resourceRegistry instanceof FileSystemXAResourceRegistry.XAResourceRegistryFile) {
+            Log.log.tracef("prepare: registry resources: %s", ((FileSystemXAResourceRegistry.XAResourceRegistryFile) resourceRegistry).resources);
+        }
         return result;
     }
 
     public void commit(final Xid xid, final boolean onePhase) throws XAException {
+        Log.log.tracef("Resource: %s. Commiting xid: %s, onephase: %s, resource registry: %s", this, xid, onePhase ? "true" : "false", resourceRegistry);
         try {
             if (commitToEnlistment()) lookup(xid).commit(onePhase);
         } catch (XAException | RuntimeException exception) {
             if (resourceRegistry != null)
                 resourceRegistry.resourceInDoubt(this);
+            if(resourceRegistry instanceof FileSystemXAResourceRegistry.XAResourceRegistryFile) {
+                Log.log.tracef("exception on commit: registry resources: %s", ((FileSystemXAResourceRegistry.XAResourceRegistryFile) resourceRegistry).resources);
+            }
             throw exception;
         }
-        if (resourceRegistry != null)
+        if(resourceRegistry instanceof FileSystemXAResourceRegistry.XAResourceRegistryFile) {
+            Log.log.tracef("commit fine: registry resources: %s", ((FileSystemXAResourceRegistry.XAResourceRegistryFile) resourceRegistry).resources);
+        }
+        if (resourceRegistry != null) {
             resourceRegistry.removeResource(this);
+            Log.log.tracef("Removing resource registry the resource: %s", this);
+            if(resourceRegistry instanceof FileSystemXAResourceRegistry.XAResourceRegistryFile) {
+                Log.log.tracef("commit fine after removal: registry resources: %s", ((FileSystemXAResourceRegistry.XAResourceRegistryFile) resourceRegistry).resources);
+            }
+        }
     }
 
     public void rollback(final Xid xid) throws XAException {
+        Log.log.tracef("Resource: %s. Rolling-back xid: %s, resource registry: %s", this, xid, resourceRegistry);
         try {
             if (commitToEnlistment()) lookup(xid).rollback();
         } catch (XAException | RuntimeException e) {
@@ -187,6 +206,7 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
     }
 
     public void forget(final Xid xid) throws XAException {
+        Log.log.tracef("Resource: %s. Forgetting xid: %s, resource registry: %s", this, xid, resourceRegistry);
         if (commitToEnlistment()) lookup(xid).forget();
     }
 
@@ -207,9 +227,14 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
     }
 
     public Xid[] recover(final int flag, final String parentName) throws XAException {
+        Log.log.tracef("Resource: %s. Recovering: %s, resource registry: %s", this, xid, resourceRegistry);
         Xid[] recoveredXids = getRemoteTransactionPeer().recover(flag, parentName);
         if ((flag & XAResource.TMSTARTRSCAN) == XAResource.TMSTARTRSCAN && recoveredXids.length == 0 && resourceRegistry != null)
             resourceRegistry.removeResource(this);
+        if(resourceRegistry instanceof FileSystemXAResourceRegistry.XAResourceRegistryFile) {
+            Log.log.tracef("recovering: registry resources: %s", ((FileSystemXAResourceRegistry.XAResourceRegistryFile) resourceRegistry).resources);
+        }
+        Log.log.tracef("Recovered Xids: %s", Arrays.asList(recoveredXids));
         return recoveredXids;
     }
 

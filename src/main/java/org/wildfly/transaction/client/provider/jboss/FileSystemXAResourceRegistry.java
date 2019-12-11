@@ -59,7 +59,7 @@ import static java.security.AccessController.doPrivileged;
  *
  * @author Flavia Rainone
  */
-final class FileSystemXAResourceRegistry {
+public final class FileSystemXAResourceRegistry {
 
     /**
      * Name of recovery dir. Location of this dir can be defined at constructor.
@@ -102,7 +102,7 @@ final class FileSystemXAResourceRegistry {
      * completed normally, or resources that have been recovered from in doubt registries. See
      * {@link XAResourceRegistryFile#resourceInDoubt} and {@link XAResourceRegistryFile#loadInDoubtResources}.
      */
-    private final Set<XAResource> inDoubtResources = Collections.synchronizedSet(new HashSet<>()); // it is a set because we could have an in doubt resource reincide in failure to complete
+    public final Set<XAResource> inDoubtResources = Collections.synchronizedSet(new HashSet<>()); // it is a set because we could have an in doubt resource reincide in failure to complete
 
     /**
      * Creates a FileSystemXAResourceRegistry.
@@ -150,7 +150,7 @@ final class FileSystemXAResourceRegistry {
      *
      * @return a list of the in doubt xa resources
      */
-    XAResource[] getInDoubtXAResources() {
+    public XAResource[] getInDoubtXAResources() {
         try {
             recoverInDoubtRegistries();
         } catch (IOException e) {
@@ -185,7 +185,7 @@ final class FileSystemXAResourceRegistry {
     /**
      * Represents a single file in the file system that records all outflowed resources per a specific local transaction.
      */
-    private final class XAResourceRegistryFile extends XAResourceRegistry {
+    public final class XAResourceRegistryFile extends XAResourceRegistry {
 
         /**
          * Path to the registry file.
@@ -203,7 +203,7 @@ final class FileSystemXAResourceRegistry {
          * Keeps track of the XA outflowed resources stored in this registry, see {@link #addResource} and
          * {@link #removeResource}.
          */
-        private final Set<XAResource> resources = Collections.synchronizedSet(new HashSet<>());
+        public final Set<XAResource> resources = Collections.synchronizedSet(new HashSet<>());
 
 
         /**
