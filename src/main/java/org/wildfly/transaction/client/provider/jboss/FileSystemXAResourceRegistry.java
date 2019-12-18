@@ -119,6 +119,10 @@ public final class FileSystemXAResourceRegistry {
         xaRecoveryDirPermission = new FilePermission(xaRecoveryPath.toString() + File.separatorChar + '*', "read,write");
     }
 
+    XAResourceRegistry getXAResourceRegistryFileForRecovery(Xid xid) throws SystemException {
+        return new XAResourceRegistryFile(xid);
+    }
+
     /**
      * Returns the XAResourceRegistry file for {@code transaction}.
      *
@@ -205,7 +209,6 @@ public final class FileSystemXAResourceRegistry {
          */
         public final Set<XAResource> resources = Collections.synchronizedSet(new HashSet<>());
 
-
         /**
          * Creates a XA  recovery registry for a transaction. This method assumes that there is no file already
          * existing for this transaction, and, furthermore, it is not thread safe  (the creation of this object is
@@ -215,6 +218,8 @@ public final class FileSystemXAResourceRegistry {
          * @throws SystemException if the there was a problem when creating the recovery file in file system
          */
         XAResourceRegistryFile(Xid xid) throws SystemException {
+            Log.log.debugf("Creating registry file from xid: %s, global: %d, branch: %d",
+                    xid, xid.getGlobalTransactionId().length, xid.getBranchQualifier().length);
             
             final String xidString = SimpleXid.of(xid).toHexString('_');
             this.filePath = xaRecoveryPath.resolve(xidString);
@@ -282,20 +287,23 @@ public final class FileSystemXAResourceRegistry {
          */
         @Override
         protected void removeResource(XAResource resource) throws XAException {
-            if (resources.remove(resource)) {
-                if (resources.isEmpty()) {
-                    // delete file
-                    try {
-                        if (fileChannel != null) {
-                            fileChannel.close();
-                        }
-                        Files.delete(filePath);
-                        openFilePaths.remove(filePath.getFileName().toString());
-                    } catch (IOException e) {
-                        throw Log.log.deleteXAResourceRecoveryFileFailed(XAException.XAER_RMERR, filePath, resource, e);
+            if(resource != null) {
+                resources.remove(resource);
+            }
+            if (resources.isEmpty()) {
+                // delete file
+                try {
+                    if (fileChannel != null) {
+                        fileChannel.close();
                     }
-                    Log.log.xaResourceRecoveryFileDeleted(filePath);
+                    Files.delete(filePath);
+                    openFilePaths.remove(filePath.getFileName().toString());
+                } catch (IOException e) {
+                    throw Log.log.deleteXAResourceRecoveryFileFailed(XAException.XAER_RMERR, filePath, resource, e);
                 }
+                Log.log.xaResourceRecoveryFileDeleted(filePath);
+            }
+            if(resource != null) {
                 // remove resource from in doubt list, in case the resource was in doubt
                 inDoubtResources.remove(resource);
             }

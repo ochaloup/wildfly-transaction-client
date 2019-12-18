@@ -161,6 +161,11 @@ public abstract class JBossLocalTransactionProvider implements LocalTransactionP
         return fileSystemXAResourceRegistry.getXAResourceRegistryFile(transaction);
     }
 
+    @Override
+    public XAResourceRegistry getXAResourceRegistryForRecovery(Xid xid) throws SystemException {
+        return fileSystemXAResourceRegistry.getXAResourceRegistryFileForRecovery(xid);
+    }
+
     abstract int getTransactionManagerTimeout() throws SystemException;
 
     public boolean isImported(@NotNull final Transaction transaction) throws IllegalArgumentException {

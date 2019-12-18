@@ -413,4 +413,8 @@ public interface Log extends BasicLogger {
     @LogMessage(level = Logger.Level.WARN)
     @Message(id = 99, value = "Error while removing imported transaction of xid %s from the underlying transaction manager")
     void cannotRemoveImportedTransaction(Xid xid, @Cause XAException e);
+
+    @LogMessage(level = Logger.Level.WARN)
+    @Message(id = 100, value = "Cannot get resource registry during recovery for removal of xid %s from the registry")
+    void cannotGetResourceRegistry(Xid xid, @Cause SystemException se);
 }

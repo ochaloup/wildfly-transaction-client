@@ -183,13 +183,7 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
         if(resourceRegistry instanceof FileSystemXAResourceRegistry.XAResourceRegistryFile) {
             Log.log.tracef("commit fine: registry resources: %s", ((FileSystemXAResourceRegistry.XAResourceRegistryFile) resourceRegistry).resources);
         }
-        if (resourceRegistry != null) {
-            resourceRegistry.removeResource(this);
-            Log.log.tracef("Removing resource registry the resource: %s", this);
-            if(resourceRegistry instanceof FileSystemXAResourceRegistry.XAResourceRegistryFile) {
-                Log.log.tracef("commit fine after removal: registry resources: %s", ((FileSystemXAResourceRegistry.XAResourceRegistryFile) resourceRegistry).resources);
-            }
-        }
+        removeResourceFromRegistry(xid);
     }
 
     public void rollback(final Xid xid) throws XAException {
@@ -201,8 +195,7 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
                 resourceRegistry.resourceInDoubt(this);
             throw e;
         }
-        if (resourceRegistry != null)
-            resourceRegistry.removeResource(this);
+        removeResourceFromRegistry(xid);
     }
 
     public void forget(final Xid xid) throws XAException {
@@ -229,8 +222,9 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
     public Xid[] recover(final int flag, final String parentName) throws XAException {
         Log.log.tracef("Resource: %s. Recovering: %s, resource registry: %s", this, xid, resourceRegistry);
         Xid[] recoveredXids = getRemoteTransactionPeer().recover(flag, parentName);
-        if ((flag & XAResource.TMSTARTRSCAN) == XAResource.TMSTARTRSCAN && recoveredXids.length == 0 && resourceRegistry != null)
-            resourceRegistry.removeResource(this);
+        if ((flag & XAResource.TMSTARTRSCAN) == XAResource.TMSTARTRSCAN && recoveredXids.length == 0 && resourceRegistry != null) {
+            removeResourceFromRegistry(this.xid);
+        }
         if(resourceRegistry instanceof FileSystemXAResourceRegistry.XAResourceRegistryFile) {
             Log.log.tracef("recovering: registry resources: %s", ((FileSystemXAResourceRegistry.XAResourceRegistryFile) resourceRegistry).resources);
         }
@@ -279,5 +273,27 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
         long elapsed = max(0L, System.nanoTime() - startTime);
         final int capturedTimeout = this.capturedTimeout;
         return capturedTimeout - (int) min(capturedTimeout, elapsed / 1_000_000_000L);
+    }
+
+    private void removeResourceFromRegistry(Xid xid) throws XAException {
+        XAResourceRegistry resourceRegistryRemoval = resourceRegistry;
+        Xid xidForRemoval = null;
+        if(resourceRegistryRemoval == null) {
+            try {
+                xidForRemoval = new SimpleXid(xid.getFormatId(), xid.getGlobalTransactionId(), new byte[Xid.MAXBQUALSIZE]);
+                resourceRegistryRemoval = LocalTransactionContext.getCurrent().getProvider().getXAResourceRegistryForRecovery(xidForRemoval);
+            } catch (SystemException se) {
+                Log.log.cannotGetResourceRegistry(xid, se);
+                return;
+            }
+        }
+        if (resourceRegistryRemoval != null) {
+            resourceRegistryRemoval.removeResource(this);
+        }
+        // TODO: delete me!
+        if(resourceRegistryRemoval instanceof FileSystemXAResourceRegistry.XAResourceRegistryFile) {
+            Log.log.tracef("after removal of xid: %s (removed xid?: %s): registry resources: %s",
+                    xid, xidForRemoval, ((FileSystemXAResourceRegistry.XAResourceRegistryFile) resourceRegistryRemoval).resources);
+        }
     }
 }

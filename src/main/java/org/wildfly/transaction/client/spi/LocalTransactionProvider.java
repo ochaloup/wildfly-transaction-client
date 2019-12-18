@@ -232,6 +232,10 @@ public interface LocalTransactionProvider extends TransactionProvider {
         return null;
     }
 
+    default XAResourceRegistry getXAResourceRegistryForRecovery(Xid xid) throws SystemException {
+        return null;
+    }
+
     /**
      * An empty provider which does not support new transactions.
      */
