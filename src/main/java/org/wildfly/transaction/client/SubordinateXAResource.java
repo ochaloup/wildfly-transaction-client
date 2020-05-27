@@ -18,22 +18,6 @@
 
 package org.wildfly.transaction.client;
 
-import static java.lang.Math.max;
-import static java.lang.Math.min;
-
-import java.io.Serializable;
-import java.net.URI;
-import java.security.PrivilegedActionException;
-import java.security.PrivilegedExceptionAction;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import javax.transaction.RollbackException;
-import javax.transaction.SystemException;
-import javax.transaction.xa.XAException;
-import javax.transaction.xa.XAResource;
-import javax.transaction.xa.Xid;
-
 import org.wildfly.common.Assert;
 import org.wildfly.common.annotation.NotNull;
 import org.wildfly.security.auth.client.AuthenticationContext;
@@ -41,6 +25,23 @@ import org.wildfly.transaction.client._private.Log;
 import org.wildfly.transaction.client.spi.RemoteTransactionPeer;
 import org.wildfly.transaction.client.spi.RemoteTransactionProvider;
 import org.wildfly.transaction.client.spi.SubordinateTransactionControl;
+
+import javax.transaction.RollbackException;
+import javax.transaction.SystemException;
+import javax.transaction.xa.XAException;
+import javax.transaction.xa.XAResource;
+import javax.transaction.xa.Xid;
+import java.io.Serializable;
+import java.net.URI;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static java.lang.Math.max;
+import static java.lang.Math.min;
 
 /**
  * @author <a href="mailto:david.lloyd@redhat.com">David M. Lloyd</a>
@@ -56,6 +57,16 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
     private long startTime = 0L;
     private volatile Xid xid;
     private int capturedTimeout;
+
+    private static final Map<Xid, XAResourceRegistryCouple> commitRegistryRemoval = new ConcurrentHashMap<>();
+    private static class XAResourceRegistryCouple {
+        private final XAResource xaResource;
+        private final XAResourceRegistry xaResourceRegistry;
+        private XAResourceRegistryCouple(XAResource xaResource, XAResourceRegistry xaResourceRegistry) {
+            this.xaResource = xaResource;
+            this.xaResourceRegistry = xaResourceRegistry;
+        }
+    }
 
     private final AtomicInteger stateRef = new AtomicInteger(0);
 
@@ -152,6 +163,9 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
 
     public int prepare(final Xid xid) throws XAException {
         final int result;
+        if(resourceRegistry != null) {
+            commitRegistryRemoval.put(xid, new XAResourceRegistryCouple(this, resourceRegistry));
+        }
         try {
             result = commitToEnlistment() ? lookup(xid).prepare() : XA_RDONLY;
         } catch (XAException | RuntimeException exception) {
@@ -160,6 +174,7 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
             throw exception;
         }
         if (resourceRegistry != null && result == XA_RDONLY) {
+            commitRegistryRemoval.remove(xid);
             resourceRegistry.removeResource(this);
         }
         return result;
@@ -173,8 +188,13 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
                 resourceRegistry.resourceInDoubt(this);
             throw exception;
         }
-        if (resourceRegistry != null)
+        if (resourceRegistry != null) {
+            commitRegistryRemoval.remove(xid);
             resourceRegistry.removeResource(this);
+        } else {
+            XAResourceRegistryCouple removalHandle = commitRegistryRemoval.get(xid);
+            removalHandle.xaResourceRegistry.removeResource(removalHandle.xaResource);
+        }
     }
 
     public void rollback(final Xid xid) throws XAException {
@@ -185,8 +205,10 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
                 resourceRegistry.resourceInDoubt(this);
             throw e;
         }
-        if (resourceRegistry != null)
+        if (resourceRegistry != null) {
+            commitRegistryRemoval.remove(xid);
             resourceRegistry.removeResource(this);
+        }
     }
 
     public void forget(final Xid xid) throws XAException {
