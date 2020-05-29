@@ -21,6 +21,9 @@ package org.wildfly.transaction.client;
 import static java.lang.Integer.signum;
 import static java.lang.Math.min;
 
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.Charset;
 import java.util.Arrays;
 
 import javax.transaction.xa.Xid;
@@ -106,6 +109,22 @@ public final class SimpleXid implements Xid, Comparable<SimpleXid> {
 
     public static SimpleXid of(final Xid xid) {
         return xid instanceof SimpleXid ? (SimpleXid) xid : new SimpleXid(xid.getFormatId(), xid.getGlobalTransactionId(), xid.getBranchQualifier());
+    }
+
+    public static SimpleXid of(final String xid) {
+        String[] xidParts = xid.split(":");
+        if(xidParts.length != 3) throw new IllegalArgumentException("String has a wrong format to be decoded as SimpleXid");
+        return new SimpleXid(Integer.parseUnsignedInt(xidParts[0],16), hexStringToByteArray(xidParts[1]), hexStringToByteArray(xidParts[2]));
+    }
+
+    public static byte[] hexStringToByteArray(String s) {
+        int len = s.length();
+        byte[] data = new byte[len/2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4)
+                    + Character.digit(s.charAt(i+1), 16));
+        }
+        return data;
     }
 
     public int compareTo(final SimpleXid o) {

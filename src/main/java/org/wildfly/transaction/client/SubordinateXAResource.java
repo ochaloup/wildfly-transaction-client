@@ -18,22 +18,6 @@
 
 package org.wildfly.transaction.client;
 
-import static java.lang.Math.max;
-import static java.lang.Math.min;
-
-import java.io.Serializable;
-import java.net.URI;
-import java.security.PrivilegedActionException;
-import java.security.PrivilegedExceptionAction;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import javax.transaction.RollbackException;
-import javax.transaction.SystemException;
-import javax.transaction.xa.XAException;
-import javax.transaction.xa.XAResource;
-import javax.transaction.xa.Xid;
-
 import org.wildfly.common.Assert;
 import org.wildfly.common.annotation.NotNull;
 import org.wildfly.security.auth.client.AuthenticationContext;
@@ -41,6 +25,21 @@ import org.wildfly.transaction.client._private.Log;
 import org.wildfly.transaction.client.spi.RemoteTransactionPeer;
 import org.wildfly.transaction.client.spi.RemoteTransactionProvider;
 import org.wildfly.transaction.client.spi.SubordinateTransactionControl;
+
+import javax.transaction.RollbackException;
+import javax.transaction.SystemException;
+import javax.transaction.xa.XAException;
+import javax.transaction.xa.XAResource;
+import javax.transaction.xa.Xid;
+import java.io.Serializable;
+import java.net.URI;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static java.lang.Math.max;
+import static java.lang.Math.min;
 
 /**
  * @author <a href="mailto:david.lloyd@redhat.com">David M. Lloyd</a>
@@ -66,8 +65,9 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
         this.authenticationContext = AuthenticationContext.captureCurrent();
     }
 
-    SubordinateXAResource(final URI location, final String parentName, final int flags, XAResourceRegistry recoveryRegistry) {
+    SubordinateXAResource(final URI location, final String parentName, Xid xid, final int flags, XAResourceRegistry recoveryRegistry) {
         this(location, parentName, recoveryRegistry);
+        this.xid = xid;
         stateRef.set(flags);
     }
 
@@ -151,6 +151,13 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
     }
 
     public int prepare(final Xid xid) throws XAException {
+        try {
+            if (resourceRegistry != null) {
+                resourceRegistry.addResource(this, xid, location);
+            }
+        } catch (SystemException se) {
+            throw new XAException(XAException.XAER_RMERR);
+        }
         final int result;
         try {
             result = commitToEnlistment() ? lookup(xid).prepare() : XA_RDONLY;
@@ -173,8 +180,20 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
                 resourceRegistry.resourceInDoubt(this);
             throw exception;
         }
-        if (resourceRegistry != null)
+        if (resourceRegistry != null) {
             resourceRegistry.removeResource(this);
+        } else {
+            for (XAResourceRegistryProvider registryProvider : XAResourceRegistryProviderRegister.getProviders()) {
+                for (XAResource xares : registryProvider.getInDoubtXAResources()) {
+                    if (xares instanceof SubordinateXAResource) {
+                        SubordinateXAResource subordinateXares = (SubordinateXAResource) xares;
+                        if (subordinateXares.resourceRegistry != null && subordinateXares.xid !=null && SimpleXid.of(xid).equals(SimpleXid.of(subordinateXares.xid))) {
+                            subordinateXares.resourceRegistry.removeResource(subordinateXares);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     public void rollback(final Xid xid) throws XAException {
