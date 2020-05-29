@@ -60,8 +60,7 @@ import org.wildfly.transaction.client.LocalTransaction;
 import org.wildfly.transaction.client.SimpleXid;
 import org.wildfly.transaction.client.XAImporter;
 import org.wildfly.transaction.client.XAResourceRegistry;
-import org.wildfly.transaction.client.XAResourceRegistryProvider;
-import org.wildfly.transaction.client.XAResourceRegistryProviderRegister;
+import org.wildfly.transaction.client.XAResourceRegistryProviderFactory;
 import org.wildfly.transaction.client._private.Log;
 import org.wildfly.transaction.client.spi.LocalTransactionProvider;
 import org.wildfly.transaction.client.spi.SubordinateTransactionControl;
@@ -97,7 +96,7 @@ public abstract class JBossLocalTransactionProvider implements LocalTransactionP
             Log.log.doRecoverFailureOnIntialization(e);
         }
         this.fileSystemXAResourceRegistry = new FileSystemXAResourceRegistry(this, xaRecoveryDirRelativeToPath);
-        XAResourceRegistryProviderRegister.register(fileSystemXAResourceRegistry::getInDoubtXAResources);
+        XAResourceRegistryProviderFactory.register(fileSystemXAResourceRegistry::getInDoubtXAResources);
         registry.addXAResourceRecovery(fileSystemXAResourceRegistry::getInDoubtXAResources);
     }
 

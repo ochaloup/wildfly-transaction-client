@@ -183,13 +183,11 @@ final class SubordinateXAResource implements XAResource, XARecoverable, Serializ
         if (resourceRegistry != null) {
             resourceRegistry.removeResource(this);
         } else {
-            for (XAResourceRegistryProvider registryProvider : XAResourceRegistryProviderRegister.getProviders()) {
-                for (XAResource xares : registryProvider.getInDoubtXAResources()) {
-                    if (xares instanceof SubordinateXAResource) {
-                        SubordinateXAResource subordinateXares = (SubordinateXAResource) xares;
-                        if (subordinateXares.resourceRegistry != null && subordinateXares.xid !=null && SimpleXid.of(xid).equals(SimpleXid.of(subordinateXares.xid))) {
-                            subordinateXares.resourceRegistry.removeResource(subordinateXares);
-                        }
+            for (XAResource xares : XAResourceRegistryProviderFactory.getInstance().getInDoubtXAResources()) {
+                if (xares instanceof SubordinateXAResource) {
+                    SubordinateXAResource subordinateXares = (SubordinateXAResource) xares;
+                    if (subordinateXares.resourceRegistry != null && subordinateXares.xid !=null && SimpleXid.of(xid).equals(SimpleXid.of(subordinateXares.xid))) {
+                        subordinateXares.resourceRegistry.removeResource(subordinateXares);
                     }
                 }
             }
