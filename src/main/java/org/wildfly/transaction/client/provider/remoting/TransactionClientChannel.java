@@ -398,10 +398,25 @@ final class TransactionClientChannel implements RemotingOperations {
                     int len = StreamUtils.readPackedSignedInt32(is);
                     int error = is.readInt();
                     final XAException xa = Log.log.peerXaException(error);
-                    xa.initCause(RemoteExceptionCause.readFromStream(is));
+                    final Throwable initCause = RemoteExceptionCause.readFromStream(is);
+                    xa.initCause(initCause);
                     if ((id = is.read()) != -1) {
                         XAException ex = Log.log.unrecognizedParameter(XAException.XAER_RMFAIL, id);
                         ex.addSuppressed(xa);
+                        throw ex;
+                    } else if(onePhase && error == XAException.XA_HEURMIX) {
+                        // this is an option to fix trouble tested in WFLY txn testsuite with a new test TransactionPropagationPrepareHaltTestCase#recoveryOnePhaseCommitRetryOnFailure
+                        // see https://github.com/ochaloup/wildfly/commit/9e6650c3528b4140f6e2724c2e60ccfb96bec332#diff-464bb949662a4a5e92d438bde740a3d9R261
+                        // as discussed at https://groups.google.com/g/narayana-users/c/eHxGb6Zc5cY
+                        // here in case of heuristic failure from onePhaseCommit at remote participant but where remote participant has two resources
+                        // https://github.com/jbosstm/narayana/blob/5.10.5.Final/ArjunaJTA/jta/classes/com/arjuna/ats/internal/jta/transaction/arjunacore/subordinate/SubordinateAtomicAction.java#L256
+                        // the heuristic outcome is returned which fails to run recovery
+                        // but in case of WFTC we know the WFTC stores RM data on the client side and is capable to rerun recovery
+                        // changing the heuristic exception to "unknown" causes this part of code is executed on the client side
+                        //https://github.com/jbosstm/narayana/blob/5.10.5.Final/ArjunaJTA/jta/classes/com/arjuna/ats/internal/jta/resources/arjunacore/XAResourceRecord.java#L759
+                        // and _heuristics is not filled with data
+                        XAException ex = Log.log.peerXaException(XAException.XA_RBEND + 1);
+                        ex.initCause(initCause);
                         throw ex;
                     } else {
                         throw xa;
