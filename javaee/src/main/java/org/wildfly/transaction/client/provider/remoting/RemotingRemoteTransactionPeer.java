@@ -92,7 +92,7 @@ class RemotingRemoteTransactionPeer implements RemoteTransactionPeer {
     ConnectionPeerIdentity getPeerIdentityXA() throws XAException {
         try {
             return getPeerIdentity();
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
             throw Log.log.failedToAcquireConnectionXA(e, XAException.XAER_RMFAIL);
         }
     }
